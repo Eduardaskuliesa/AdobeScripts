@@ -11,34 +11,8 @@
         "SRA3+": { width: 330 * mmToPt, height: 488 * mmToPt }
     };
     
-    // Performance timer function
-    function Timer(label) {
-        this.label = label;
-        this.startTime = new Date().getTime();
-        this.lastLap = this.startTime;
-        
-        this.lap = function(operation) {
-            var now = new Date().getTime();
-            var elapsed = (now - this.lastLap) / 1000;
-            $.writeln(this.label + " - " + operation + ": " + elapsed.toFixed(3) + "s");
-            this.lastLap = now;
-            return elapsed;
-        };
-        
-        this.total = function() {
-            var now = new Date().getTime();
-            var elapsed = (now - this.startTime) / 1000;
-            $.writeln(this.label + " - TOTAL: " + elapsed.toFixed(3) + "s");
-            return elapsed;
-        };
-    }
-    
-    // Start timer
-    var timer = new Timer("CutContour Splitter");
-    
     // 0) Preconditions
     if (!app.documents.length) {
-        alert("Please open a document first!");
         return;
     }
     var origDoc = app.activeDocument,
@@ -91,15 +65,11 @@
             return false;
         }
     }
-    
-    timer.lap("Setup");
 
     // 1) Unlock all layers in the original so we can read & duplicate their contents
     for (var L = 0; L < origDoc.layers.length; L++) {
         origDoc.layers[L].locked = false;
     }
-    
-    timer.lap("Unlocking layers");
 
     // 2) Clone the document by layer → item duplication
     var cloneDoc = app.documents.add(origDoc.documentColorSpace, docW, docH);
@@ -121,9 +91,6 @@
         layerMap[srcLayer.name] = dstLayer;
     }
     
-    timer.lap("Creating layers in clone");
-    
-    // Now duplicate all items
     var cutContourCount = 0;
     var nonCutContourCount = 0;
     
@@ -136,9 +103,6 @@
         
         // Skip empty layers
         if (itemCount === 0) continue;
-        
-        $.writeln("Processing layer " + (j+1) + "/" + origDoc.layers.length + 
-                  ": " + srcLayer.name + " (" + itemCount + " items)");
         
         // For large layers, process in batches to show progress
         var batchSize = Math.max(10, Math.min(itemCount, 50));
@@ -158,16 +122,8 @@
                     $.writeln("Error duplicating item: " + e);
                 }
             }
-            
-            // Progress update
-            if (batches > 1) {
-                $.writeln("  Batch " + (batchIdx+1) + "/" + batches + " done");
-            }
         }
     }
-    
-    timer.lap("Copying all items to clone");
-    alert("✅ Document cloned successfully");
 
     // 3) On ORIGINAL: scan ALL pageItems, not just pathItems
     origDoc.activate();
@@ -218,15 +174,9 @@
             continue;
         }
         
-        $.writeln("Scanning layer: " + layerName + " for CutContour items");
-        
         // Scan this layer recursively
         scanAndRemoveCutContour(layer);
     }
-    
-    timer.lap("Removing CutContour items from original");
-    alert("🗑️ Removed " + removedCount + " CutContour item" + 
-           (removedCount !== 1 ? "s" : "") + " from the original");
 
     // OPTIMIZATION FOR CLONE:
     // First ungroup everything in batch mode
@@ -236,8 +186,6 @@
         var groupCount = doc.groupItems.length;
         var originalCount = groupCount;
         var ungrouped = 0;
-        
-        $.writeln("Ungrouping " + groupCount + " groups");
         
         // Process in batches of 20 for better performance
         while (groupCount > 0) {
@@ -277,16 +225,12 @@
             
             // Update count for next iteration
             groupCount = doc.groupItems.length;
-            
-            // Progress report
-            $.writeln("  Ungrouped " + ungrouped + " groups, " + groupCount + " remaining");
         }
         
         return ungrouped;
     }
     
     var ungroupedCount = ungroupAll(cloneDoc);
-    timer.lap("Ungrouping clone (" + ungroupedCount + " groups)");
     
     // Now index all non-CutContour items for faster removal
     var nonCutContourItems = [];
@@ -305,8 +249,6 @@
         var itemCount = cloneLayer.pageItems.length;
         
         if (itemCount > 0) {
-            $.writeln("  Scanning clone layer " + cloneLayerName + " (" + itemCount + " items)");
-            
             // Process in batches for large layers
             var batchSize = Math.min(1000, Math.max(100, Math.floor(itemCount / 10)));
             
@@ -323,22 +265,13 @@
                 if (!isCutContour(item)) {
                     nonCutContourItems.push(item);
                 }
-                
-                // Show progress for large layers
-                if (itemCount > 1000 && itemIdx % batchSize === 0) {
-                    $.writeln("    Scanned " + itemIdx + " of " + itemCount + " items...");
-                }
             }
         }
     }
     
-    timer.lap("Indexing non-CutContour items in clone");
-    
     // Now remove all identified non-CutContour items
     var nonCutContourCount = nonCutContourItems.length;
     var keptCount = cloneDoc.pathItems.length - nonCutContourCount;
-    
-    $.writeln("Removing " + nonCutContourCount + " non-CutContour items from clone document");
     
     // Remove in batches for better performance
     var batchSize = Math.min(1000, Math.max(100, Math.floor(nonCutContourCount / 10)));
@@ -349,14 +282,7 @@
         } catch(e) {
             // Just continue if we can't remove an item
         }
-        
-        // Show progress
-        if (nonCutContourCount > 1000 && removeIdx % batchSize === 0) {
-            $.writeln("  Removed " + removeIdx + " of " + nonCutContourCount + " items...");
-        }
     }
-    
-    timer.lap("Removing non-CutContour items from clone");
     
     // ========= AUTO-SAVE FUNCTIONALITY =========
     // This runs after all the CutContour processing is complete
@@ -377,7 +303,6 @@
             }
             
             if (!namedDoc) {
-                alert("Error: Could not find a named document to extract information from.");
                 return null;
             }
             
@@ -386,7 +311,6 @@
             var parts = fileName.split("_");
             
             if (parts.length < 2) {
-                alert("Error: Filename not in expected format. Expected: OrderID_ItemCount_...");
                 return null;
             }
             
@@ -423,14 +347,9 @@
             
             // Create folders if they don't exist
             var printReadyFolder = new Folder(SPAUDAI_LOCATION);
-            var cutFolder = new Folder(PJOVIMUI_LOCATION);
-            
+           
             if (!printReadyFolder.exists) {
                 printReadyFolder.create();
-            }
-            
-            if (!cutFolder.exists) {
-                cutFolder.create();
             }
             
             // Set up PDF save options
@@ -445,55 +364,30 @@
             var printFile = new File(printReadyFolder + "/" + printFilename);
             origDoc.saveAs(printFile, pdfSaveOpts);
             
-            cloneDoc.activate();
-            var cutFilename = baseFilename + "_pjovimui.pdf";
-            var cutFile = new File(cutFolder + "/" + cutFilename);
-            cloneDoc.saveAs(cutFile, pdfSaveOpts);
-            
-            // Return to original document
             origDoc.activate();
             
             return {
                 printFile: printFilename,
-                cutFile: cutFilename,
                 printPath: printReadyFolder.fsName,
-                cutPath: cutFolder.fsName,
                 papersNeeded: papersNeeded
             };
         }
         catch(e) {
-            alert("Error in autoSaveDocuments: " + e);
+            $.writeln("Error in autoSaveDocuments: " + e);
             return null;
         }
     }
     
     // Run auto-save after all processing is complete
-    timer.lap("Starting auto-save");
     var saveResults = autoSaveDocuments();
-    timer.lap("Auto-save complete");
-    
-    // Calculate total processing time
-    var totalTime = timer.total();
-    
-    // Display final results
-    if (saveResults) {
-        alert("✅ Processing and auto-save complete!\n\n" +
-              "📄 Print file (original document):\n" + saveResults.printFile + "\n" +
-              "📁 Location: " + saveResults.printPath + "\n\n" +
-              "✂️ Cut file (CutContour only):\n" + saveResults.cutFile + "\n" +
-              "📁 Location: " + saveResults.cutPath + "\n\n" +
-              "In the original removed " + removedCount + " CutContour item" + 
-              (removedCount !== 1 ? "s" : "") + ".\n" +
-              "In the clone kept " + keptCount + " CutContour item" + 
-              (keptCount !== 1 ? "s" : "") + ".\n\n" +
-              "⏱️ Total processing time: " + totalTime.toFixed(2) + " seconds.");
-    } else {
-        alert("✔️ CutContour processing complete, but auto-save failed.\n\n" +
-              "In the original removed " + removedCount + " CutContour item" + 
-              (removedCount !== 1 ? "s" : "") + ".\n" +
-              "In the clone kept " + keptCount + " CutContour item" + 
-              (keptCount !== 1 ? "s" : "") + ".\n\n" +
-              "⏱️ Total processing time: " + totalTime.toFixed(2) + " seconds.\n" +
-              "See JavaScript console for detailed timing information.");
-    }
+
+    // try {
+    //     app.doScript("Open Print2", "ScriptActions");
+    // } catch (e) {
+    //     alert(
+    //       "Could not run action "Open Print2" in set "ScriptActions".\n" +
+    //       "Check that both names match exactly.\n\n" +
+    //       e.message
+    //     );
+    // }
 })();
